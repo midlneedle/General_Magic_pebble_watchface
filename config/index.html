@@ -657,6 +657,7 @@
         '#hourly-chime-field',
         '#hourly-chime-strength-field'
       ].join(', ');
+      var EXIT_FADE_SELECTOR = '#vibe-options, #vibrate-on-start-collapse, #hourly-chime-divider-collapse';
 
       function segmentedNeedsKnob(group) {
         if (!group) {
@@ -753,8 +754,42 @@
         return rects;
       }
 
+      function animateExitGhost(element, firstRect, easing) {
+        if (!element || !firstRect || firstRect.width <= 0 || firstRect.height <= 0) {
+          return;
+        }
+        var ghost = element.cloneNode(true);
+        ghost.setAttribute('aria-hidden', 'true');
+        ghost.style.position = 'fixed';
+        ghost.style.left = firstRect.left + 'px';
+        ghost.style.top = firstRect.top + 'px';
+        ghost.style.width = firstRect.width + 'px';
+        ghost.style.height = firstRect.height + 'px';
+        ghost.style.margin = '0';
+        ghost.style.pointerEvents = 'none';
+        ghost.style.zIndex = '9999';
+        ghost.style.transform = 'translateY(0)';
+        ghost.style.opacity = '1';
+        ghost.style.boxSizing = 'border-box';
+        document.body.appendChild(ghost);
+
+        var animation = ghost.animate(
+          [
+            { opacity: 1, transform: 'translateY(0)' },
+            { opacity: 0, transform: 'translateY(-6px)' }
+          ],
+          { duration: 220, easing: easing }
+        );
+        animation.onfinish = function () {
+          if (ghost && ghost.parentNode) {
+            ghost.parentNode.removeChild(ghost);
+          }
+        };
+      }
+
       function playLayoutFlip(beforeRects) {
         var targets = getLayoutFlipTargets();
+        var targetSet = new Set(targets);
         var duration = 280;
         var easing = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 
@@ -805,6 +840,16 @@
             );
           }
         }
+
+        beforeRects.forEach(function (firstRect, element) {
+          if (targetSet.has(element)) {
+            return;
+          }
+          if (!element.matches(EXIT_FADE_SELECTOR)) {
+            return;
+          }
+          animateExitGhost(element, firstRect, easing);
+        });
       }
 
       function runLayoutTransition(mutator, enabled) {
