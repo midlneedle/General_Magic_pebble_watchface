@@ -1,6 +1,6 @@
 (() => {
   const TAG = 'general_magic-js';
-  const CONFIG_URL = 'https://midlneedle-stack.github.io/General_Magic_pebble_watchface/config/index.html';
+  const CONFIG_URL = 'https://midlneedle.github.io/General_Magic_pebble_watchface/config/index.html';
   const SETTINGS_KEY = 'general_magic_settings';
   const HOURLY_CHIME_STRENGTHS = ['light', 'medium', 'hard'];
   const normalizeHourlyStrength = (value) => {
