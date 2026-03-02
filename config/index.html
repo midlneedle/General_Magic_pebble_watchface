@@ -120,6 +120,7 @@
         padding: 18px 22px;
         border-radius: 16px;
         border: 1px solid #2b2b2b;
+        overflow: hidden;
       }
       .connect-panel {
         border: 1px solid #2b2b2b;
@@ -290,45 +291,35 @@
         padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 16px;
-        overflow: hidden;
-        max-height: 600px;
-        transition:
-          max-height 0.32s cubic-bezier(0.5, 0, 0, 1),
-          opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-          transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
-          margin-top 0.28s cubic-bezier(0.22, 1, 0.36, 1);
-        transform: translateY(0);
+        gap: 0;
+      }
+      .vibe-options .field-divider {
+        margin: 0;
       }
       .collapsible {
         display: flex;
         flex-direction: column;
         gap: 16px;
-        overflow: hidden;
-        max-height: 600px;
-        transition:
-          max-height 0.32s cubic-bezier(0.5, 0, 0, 1),
-          opacity 0.26s cubic-bezier(0.22, 1, 0.36, 1),
-          transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
-        transform: translateY(0);
+      }
+      #vibrate-on-start-collapse {
+        margin-bottom: 16px;
+      }
+      .divider-collapsible {
+        margin-bottom: 16px;
       }
       .vibe-options.is-hidden,
-      .collapsible.is-collapsed {
-        max-height: 0;
-        opacity: 0;
-        pointer-events: none;
-        transform: translateY(-6px);
+      .collapsible.is-collapsed,
+      .divider-collapsible.is-collapsed {
+        display: none;
+      }
+      #vibrate-on-start-collapse.is-collapsed {
+        margin-bottom: 0;
+      }
+      .divider-collapsible.is-collapsed {
+        margin-bottom: 0;
+      }
+      .vibe-options.is-hidden {
         margin-top: 0;
-      }
-      .collapsible.is-animating {
-        pointer-events: none;
-      }
-      .vibe-options.is-animating {
-        opacity: 0;
-        transform: translateY(-6px);
-      }
-      .vibe-options .field-divider {
-        margin: 0;
       }
       .field.is-hidden {
         display: none;
@@ -526,7 +517,9 @@
               </div>
             </div>
           </div>
-          <div class="field-divider" aria-hidden="true" id="hourly-chime-divider"></div>
+          <div class="divider-collapsible" id="hourly-chime-divider-collapse">
+            <div class="field-divider" aria-hidden="true" id="hourly-chime-divider"></div>
+          </div>
           <div class="field" id="hourly-chime-field">
             <div class="field-label">Hourly Chime</div>
             <div class="segmented" data-field="hourlyChime" data-type="bool">
@@ -648,10 +641,22 @@
       var watchFace12 = document.getElementById('watch-face-12');
       var vibeOptions = document.getElementById('vibe-options');
       var vibrateOnStartCollapse = document.getElementById('vibrate-on-start-collapse');
+      var hourlyChimeDividerCollapse = document.getElementById('hourly-chime-divider-collapse');
       var vibrateOnOpenField = document.getElementById('vibrate-on-open-field');
       var hourlyChimeField = document.getElementById('hourly-chime-field');
       var hourlyChimeStrengthField = document.getElementById('hourly-chime-strength-field');
       var hourlyStrengthVisible = false;
+      var segmentedKnobFrame = null;
+      var LAYOUT_FLIP_SELECTOR = [
+        '.panel',
+        '.actions',
+        '.connect-panel',
+        '#vibe-options',
+        '#vibrate-on-start-collapse',
+        '#hourly-chime-divider-collapse',
+        '#hourly-chime-field',
+        '#hourly-chime-strength-field'
+      ].join(', ');
 
       function segmentedNeedsKnob(group) {
         if (!group) {
@@ -711,6 +716,121 @@
         }
       }
 
+      function scheduleSegmentedKnobUpdate() {
+        if (segmentedKnobFrame !== null) {
+          return;
+        }
+        segmentedKnobFrame = requestAnimationFrame(function () {
+          segmentedKnobFrame = null;
+          updateAllSegmentedKnobs();
+        });
+      }
+
+      function prefersReducedMotion() {
+        return (
+          typeof window !== 'undefined' &&
+          typeof window.matchMedia === 'function' &&
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        );
+      }
+
+      function getLayoutFlipTargets() {
+        var targets = document.querySelectorAll(LAYOUT_FLIP_SELECTOR);
+        var visible = [];
+        for (var i = 0; i < targets.length; i += 1) {
+          if (targets[i].getClientRects().length > 0) {
+            visible.push(targets[i]);
+          }
+        }
+        return visible;
+      }
+
+      function captureRects(elements) {
+        var rects = new Map();
+        for (var i = 0; i < elements.length; i += 1) {
+          rects.set(elements[i], elements[i].getBoundingClientRect());
+        }
+        return rects;
+      }
+
+      function playLayoutFlip(beforeRects) {
+        var targets = getLayoutFlipTargets();
+        var duration = 280;
+        var easing = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
+
+        for (var i = 0; i < targets.length; i += 1) {
+          var el = targets[i];
+          var first = beforeRects.get(el);
+          var last = el.getBoundingClientRect();
+
+          if (!first) {
+            el.animate(
+              [
+                { opacity: 0, transform: 'translateY(-6px)' },
+                { opacity: 1, transform: 'translateY(0)' }
+              ],
+              { duration: 220, easing: easing }
+            );
+            continue;
+          }
+
+          var dx = first.left - last.left;
+          var dy = first.top - last.top;
+          var dw = first.width - last.width;
+          var dh = first.height - last.height;
+          var moved = Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5;
+          var resized = Math.abs(dw) >= 0.5 || Math.abs(dh) >= 0.5;
+
+          if (!moved && !resized) {
+            continue;
+          }
+
+          if (el.classList.contains('panel') && resized) {
+            el.animate(
+              [
+                { height: first.height + 'px' },
+                { height: last.height + 'px' }
+              ],
+              { duration: duration, easing: easing }
+            );
+          }
+
+          if (moved) {
+            el.animate(
+              [
+                { transform: 'translate(' + dx + 'px, ' + dy + 'px)' },
+                { transform: 'translate(0, 0)' }
+              ],
+              { duration: duration, easing: easing }
+            );
+          }
+        }
+      }
+
+      function runLayoutTransition(mutator, enabled) {
+        if (
+          !enabled ||
+          prefersReducedMotion() ||
+          typeof Element === 'undefined' ||
+          !Element.prototype.animate
+        ) {
+          mutator();
+          return;
+        }
+        var beforeRects = captureRects(getLayoutFlipTargets());
+        mutator();
+        document.body.offsetHeight;
+        playLayoutFlip(beforeRects);
+      }
+
+      function setCollapseState(element, open, collapsedClass) {
+        if (!element) {
+          return;
+        }
+        var className = collapsedClass || 'is-collapsed';
+        element.classList.toggle(className, !open);
+      }
+
       initSegmentedKnobs();
       updateAllSegmentedKnobs();
       setWatchPreviewImages();
@@ -724,9 +844,7 @@
         var show12 = state.timeFormat === '12';
         var entering = show12 ? watchFace12 : watchFace24;
         var exiting = show12 ? watchFace24 : watchFace12;
-        var reduceMotion =
-          typeof window !== 'undefined' &&
-          window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var reduceMotion = prefersReducedMotion();
 
         entering.classList.add('is-foreground');
         exiting.classList.remove('is-foreground');
@@ -765,7 +883,10 @@
         setWatchPreviewImages();
       }
 
-      function syncButtons() {
+      function syncButtons(animateLayout) {
+        runLayoutTransition(function () {
+          syncVibrationDependencies();
+
         var groups = document.querySelectorAll('.segmented');
         for (var i = 0; i < groups.length; i += 1) {
           var group = groups[i];
@@ -786,66 +907,31 @@
           hideHourlyStrengthChooser();
         }
         updatePreview();
-        updateVibrationVisibility();
-        syncVibrationDependencies();
-        updateAllSegmentedKnobs();
+        scheduleSegmentedKnobUpdate();
+        }, !!animateLayout);
       }
 
-      function updateVibrationVisibility() {
+      function updateVibrationVisibility(forceEnabled) {
         if (!vibeOptions) {
           return;
         }
-        if (state.vibration) {
-          vibeOptions.classList.add('is-animating');
-          // allow transition to pick up before removing hidden state
-          requestAnimationFrame(function () {
-            vibeOptions.classList.remove('is-hidden');
-            // clear animating marker after transition frame
-            requestAnimationFrame(function () {
-              vibeOptions.classList.remove('is-animating');
-            });
-          });
-        } else {
-          vibeOptions.classList.add('is-hidden');
+        var vibrationEnabled =
+          typeof forceEnabled === 'boolean' ? forceEnabled : state.vibration !== false;
+        setCollapseState(vibeOptions, vibrationEnabled, 'is-hidden');
+        if (!vibrationEnabled) {
           hideHourlyStrengthChooser();
         }
       }
 
-      function setCollapseState(element, open) {
-        if (!element) {
-          return;
-        }
-        element.classList.add('is-animating');
-        if (open) {
-          element.classList.remove('is-collapsed');
-          requestAnimationFrame(function () {
-            element.classList.remove('is-animating');
-          });
-        } else {
-          element.classList.add('is-collapsed');
-          requestAnimationFrame(function () {
-            element.classList.remove('is-animating');
-          });
-        }
-      }
-
       function syncVibrationDependencies() {
+        var vibrationEnabled = state.vibration !== false;
         var animationEnabled = state.animation !== false;
         if (!animationEnabled && state.vibrateOnOpen) {
           state.vibrateOnOpen = false;
-          var vibGroup = document.querySelector('[data-field="vibrateOnOpen"]');
-          if (vibGroup) {
-            var buttons = vibGroup.querySelectorAll('button');
-            buttons.forEach(function (btn) {
-              var isOff = btn.getAttribute('data-value') === 'false';
-              btn.classList.toggle('active', isOff);
-            });
-          }
         }
-        if (vibrateOnStartCollapse) {
-          setCollapseState(vibrateOnStartCollapse, animationEnabled);
-        }
-        updateVibrationVisibility();
+        setCollapseState(vibrateOnStartCollapse, animationEnabled, 'is-collapsed');
+        setCollapseState(hourlyChimeDividerCollapse, animationEnabled, 'is-collapsed');
+        updateVibrationVisibility(vibrationEnabled);
       }
 
       function showHourlyStrengthChooser() {
@@ -857,7 +943,7 @@
           hourlyChimeStrengthField.classList.remove('is-hidden');
           hourlyChimeStrengthField.classList.add('is-visible');
         }
-        updateAllSegmentedKnobs();
+        scheduleSegmentedKnobUpdate();
       }
 
       function hideHourlyStrengthChooser() {
@@ -869,13 +955,13 @@
           hourlyChimeStrengthField.classList.add('is-hidden');
           hourlyChimeStrengthField.classList.remove('is-visible');
         }
-        updateAllSegmentedKnobs();
+        scheduleSegmentedKnobUpdate();
       }
 
 
       var segmentedGroups = document.querySelectorAll('.segmented');
       window.addEventListener('resize', function () {
-        updateAllSegmentedKnobs();
+        scheduleSegmentedKnobUpdate();
       });
       for (var g = 0; g < segmentedGroups.length; g += 1) {
         (function (group) {
@@ -898,21 +984,21 @@
                 state.hourlyChime = false;
                 hideHourlyStrengthChooser();
               }
-              syncButtons();
+              syncButtons(true);
               return;
             }
             if (field === 'hourlyChimeStrength') {
               state.hourlyChimeStrength = normalizeHourlyChimeStrength(value);
               state.hourlyChime = true;
               hideHourlyStrengthChooser();
-              syncButtons();
+              syncButtons(true);
               return;
             }
             if (type === 'bool') {
               value = value === 'true';
             }
             state[field] = value;
-            syncButtons();
+            syncButtons(true);
           });
         })(segmentedGroups[g]);
       }
@@ -924,7 +1010,7 @@
         document.location = 'pebblejs://close#' + payload;
       });
 
-      syncButtons();
+      syncButtons(false);
     </script>
   </body>
 </html>
