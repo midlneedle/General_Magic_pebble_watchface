@@ -749,17 +749,30 @@
       function captureRects(elements) {
         var rects = new Map();
         for (var i = 0; i < elements.length; i += 1) {
-          rects.set(elements[i], elements[i].getBoundingClientRect());
+          rects.set(elements[i], {
+            rect: elements[i].getBoundingClientRect(),
+            display: window.getComputedStyle(elements[i]).display
+          });
         }
         return rects;
       }
 
-      function animateExitGhost(element, firstRect, easing) {
-        if (!element || !firstRect || firstRect.width <= 0 || firstRect.height <= 0) {
+      function animateExitGhost(element, firstSnapshot, easing) {
+        if (
+          !element ||
+          !firstSnapshot ||
+          !firstSnapshot.rect ||
+          firstSnapshot.rect.width <= 0 ||
+          firstSnapshot.rect.height <= 0
+        ) {
           return;
         }
+        var firstRect = firstSnapshot.rect;
         var ghost = element.cloneNode(true);
         ghost.setAttribute('aria-hidden', 'true');
+        ghost.removeAttribute('id');
+        ghost.classList.remove('is-hidden');
+        ghost.classList.remove('is-collapsed');
         ghost.style.position = 'fixed';
         ghost.style.left = firstRect.left + 'px';
         ghost.style.top = firstRect.top + 'px';
@@ -771,6 +784,7 @@
         ghost.style.transform = 'translateY(0)';
         ghost.style.opacity = '1';
         ghost.style.boxSizing = 'border-box';
+        ghost.style.display = firstSnapshot.display || 'block';
         document.body.appendChild(ghost);
 
         var animation = ghost.animate(
@@ -778,7 +792,7 @@
             { opacity: 1, transform: 'translateY(0)' },
             { opacity: 0, transform: 'translateY(-6px)' }
           ],
-          { duration: 220, easing: easing }
+          { duration: 280, easing: easing }
         );
         animation.onfinish = function () {
           if (ghost && ghost.parentNode) {
@@ -795,7 +809,8 @@
 
         for (var i = 0; i < targets.length; i += 1) {
           var el = targets[i];
-          var first = beforeRects.get(el);
+          var firstSnapshot = beforeRects.get(el);
+          var first = firstSnapshot && firstSnapshot.rect;
           var last = el.getBoundingClientRect();
 
           if (!first) {
@@ -841,14 +856,25 @@
           }
         }
 
-        beforeRects.forEach(function (firstRect, element) {
+        beforeRects.forEach(function (firstSnapshot, element) {
           if (targetSet.has(element)) {
             return;
           }
           if (!element.matches(EXIT_FADE_SELECTOR)) {
             return;
           }
-          animateExitGhost(element, firstRect, easing);
+          var parent = element.parentElement;
+          while (parent) {
+            if (
+              beforeRects.has(parent) &&
+              !targetSet.has(parent) &&
+              parent.matches(EXIT_FADE_SELECTOR)
+            ) {
+              return;
+            }
+            parent = parent.parentElement;
+          }
+          animateExitGhost(element, firstSnapshot, easing);
         });
       }
 
